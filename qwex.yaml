@@ -1,0 +1,96 @@
+# qwex.yaml - SSH + Slurm + Singularity + GDrive example
+#
+# Execution chain (outer → inner):
+#   SSH → Slurm → Singularity → your command
+#
+# Storage:
+#   - code: cloned from GitHub at init
+#   - data: downloaded from GDrive at init
+#   - runs: uploaded to GDrive on exit (logs, status, artifacts)
+
+layers:
+  # ─── Shells ───
+  local:
+    type: local
+
+  ssh:
+    type: ssh
+    host: csc
+    config: ~/.ssh/config
+
+  # ─── Schedulers ───
+  slurm:
+    type: slurm
+    partition: gpu
+    time: "04:00:00"
+    gpus: 1
+    cpus: 4
+    memory: 32G
+
+  # ─── Containers ───
+  singularity:
+    type: singularity
+    image: docker://pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+
+storage:
+  code:
+    type: git
+    repo: github.com/quatton/ssh-slurm-singularity-gdrive-example
+    ref: main
+    path: /workspace/code
+    auth:
+      type: gh
+
+  data:
+    type: gdrive
+    folder_id: 1ABC123xyz
+    path: /workspace/data
+    readonly: true
+    auth:
+      type: service-account
+      key: ~/.config/gdrive-sa.json
+
+  runs:
+    type: gdrive
+    folder_id: 1XYZ789abc
+    path: /workspace/runs
+    sync: on-exit  # upload logs/artifacts when job finishes
+    auth:
+      type: service-account
+      key: ~/.config/gdrive-sa.json
+
+workflows:
+  hello:
+    command: |
+      echo "Hello from Qwex on HPC!"
+      uname -a
+  
+runners:
+  hpc:
+    layers:
+      - ssh
+      - slurm
+      - singularity
+    storage:
+      source: code
+      data: data
+      run: runs
+
+  # Run locally in Singularity (for testing)
+  local-container:
+    layers:
+      - local
+      - singularity
+    storage:
+      source: code
+
+  # Run locally without container (dev mode)
+  local-dev:
+    layers:
+      - local
+    # no storage - use local files
+
+# Default runner when not specified
+default:
+  runner: hpc
+  workflow: hello
