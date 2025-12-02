@@ -1,18 +1,10 @@
-# qwex.yaml - SSH + Slurm + Singularity + GDrive example
-#
-# Execution chain (outer → inner):
-#   SSH → Slurm → Singularity → your command
-#
-# Storage:
-#   - code: mounted directly or cloned from GitHub
-#   - data: downloaded from GDrive at init
-#   - runs: uploaded to GDrive on exit (logs, status, artifacts)
+name: ssh-slurm-singularity-gdrive
 
 layers:
   ssh:
     type: ssh
     host: csc
-    config: ~/.ssh/config
+    user: qtn
 
   # ─── Schedulers ───
   slurm:
@@ -28,19 +20,24 @@ layers:
     type: singularity
     image: docker://pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
 
+  docker:
+    type: docker
+    image: pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+
 storage:
+  code-direct-git:
+    type: git-direct
+    depends_on: ssh
+ 
   # Direct mount - use existing local path
   code-local:
     type: mount
     source: .  # current directory
-    path: /workspace/code
 
   # Git clone - for remote execution
-  code-git:
+  code-github:
     type: git
     repo: github.com/quatton/ssh-slurm-singularity-gdrive
-    ref: main
-    path: /workspace/code
     auth:
       type: gh
 
@@ -63,6 +60,13 @@ storage:
       key: ~/.config/gdrive-sa.json
   
 runners:
+  # SSH only (simple remote execution)
+  ssh:
+    layers:
+      - ssh
+    storage:
+      source: code-direct-git
+
   # Full HPC: SSH → Slurm → Singularity
   hpc:
     layers:
@@ -70,14 +74,14 @@ runners:
       - slurm
       - singularity
     storage:
-      source: code-git  # clone on remote
+      source: code-github  # clone on remote
       data: data
       run: runs
 
-  # Local Singularity (for testing)
+  # Local Docker (for testing)
   container:
     layers:
-      - singularity
+      - docker
     storage:
       source: code-local  # direct mount
 
