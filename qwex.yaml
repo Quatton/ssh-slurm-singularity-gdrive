@@ -4,15 +4,11 @@
 #   SSH → Slurm → Singularity → your command
 #
 # Storage:
-#   - code: cloned from GitHub at init
+#   - code: mounted directly or cloned from GitHub
 #   - data: downloaded from GDrive at init
 #   - runs: uploaded to GDrive on exit (logs, status, artifacts)
 
 layers:
-  # ─── Shells ───
-  local:
-    type: local
-
   ssh:
     type: ssh
     host: csc
@@ -33,9 +29,16 @@ layers:
     image: docker://pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
 
 storage:
-  code:
+  # Direct mount - use existing local path
+  code-local:
+    type: mount
+    source: .  # current directory
+    path: /workspace/code
+
+  # Git clone - for remote execution
+  code-git:
     type: git
-    repo: github.com/quatton/ssh-slurm-singularity-gdrive-example
+    repo: github.com/quatton/ssh-slurm-singularity-gdrive
     ref: main
     path: /workspace/code
     auth:
@@ -58,39 +61,25 @@ storage:
     auth:
       type: service-account
       key: ~/.config/gdrive-sa.json
-
-workflows:
-  hello:
-    command: |
-      echo "Hello from Qwex on HPC!"
-      uname -a
   
 runners:
+  # Full HPC: SSH → Slurm → Singularity
   hpc:
     layers:
       - ssh
       - slurm
       - singularity
     storage:
-      source: code
+      source: code-git  # clone on remote
       data: data
       run: runs
 
-  # Run locally in Singularity (for testing)
-  local-container:
+  # Local Singularity (for testing)
+  container:
     layers:
-      - local
       - singularity
     storage:
-      source: code
+      source: code-local  # direct mount
 
-  # Run locally without container (dev mode)
-  local-dev:
-    layers:
-      - local
-    # no storage - use local files
-
-# Default runner when not specified
-default:
-  runner: hpc
-  workflow: hello
+  # Default: no layers, just run locally
+  # (implicit when no runner specified)
